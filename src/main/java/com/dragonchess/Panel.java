@@ -216,8 +216,6 @@ public class Panel extends JPanel implements Runnable, MouseListener {
         activeP.y = mouse.y - Board.square_size / 2;
         activeP.col = activeP.getCol(activeP.x);
         activeP.row = activeP.getRow(activeP.y);
-        // System.out.println("Simulating move for piece at (" + activeP.preCol + ", " +
-        // activeP.preRow + ") to (" + activeP.col + ", " + activeP.row + ")");
         if (activeP.canMove(activeP.col, activeP.row)) {
             canMove = true;
             if (activeP.isPieceThere != null) {
@@ -225,7 +223,6 @@ public class Panel extends JPanel implements Runnable, MouseListener {
             }
             checkCastling();
             if (isIllegal(activeP) == false && opponentCanCaptureKing() == false) {
-                // System.out.println("Valid move");
                 validSquare = true;
             }
 

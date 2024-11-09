@@ -3,8 +3,6 @@ package com.dragonchess;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
 
 import org.apache.batik.transcoder.TranscoderInput;
 import org.apache.batik.transcoder.TranscoderOutput;
@@ -96,9 +94,9 @@ public class Piece {
         x = getX(col);
         y = getY(row);
         // debug move
-        System.out.println((color == Panel.WHITE ? "White" : "Black") + " Moved " +
-                type + " from (" + preRow + "," + preCol +
-                ") to (" + row + "," + col + ")");
+        // System.out.println((color == Panel.WHITE ? "White" : "Black") + " Moved " +
+        //         type + " from (" + preRow + "," + preCol +
+        //         ") to (" + row + "," + col + ")");
         preCol = getCol(x);
         preRow = getRow(y);
         moved = true;
@@ -124,6 +122,13 @@ public class Piece {
         return preCol == targetCol && preRow == targetRow;
     }
 
+    /**
+     * Checks if there is a piece at the specified target column and row.
+     *
+     * @param targetCol the target column to check
+     * @param targetRow the target row to check
+     * @return the piece at the specified location if it exists and is not the current piece, otherwise null
+     */
     public Piece isPieceThere(int targetCol, int targetRow) {
         for (Piece piece : Panel.simPieces) {
             if (piece.col == targetCol && piece.row == targetRow && piece != this) {
@@ -234,18 +239,7 @@ public class Piece {
         return false; // No piece found along the diagonal
     }
 
-    public List<int[]> getPossibleMoves(List<Piece> simPieces) {
-        List<int[]> possibleMoves = new ArrayList<>();
-
-        for (int col = 0; col < 8; col++) {
-            for (int row = 0; row < 8; row++) {
-                if (canMove(col, row)) { // assumes canMove is implemented for each piece type
-                    possibleMoves.add(new int[] { col, row });
-                }
-            }
-        }
-        return possibleMoves;
-    }
+    
 
     public void draw(Graphics2D g2) {
         if (image != null) {

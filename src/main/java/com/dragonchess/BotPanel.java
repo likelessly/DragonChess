@@ -1,10 +1,12 @@
 package com.dragonchess;
 
-import java.util.List;
+import java.util.ArrayList;
+
 import javax.swing.JFrame;
 
 public class BotPanel extends Panel {
-    private int depth = 3;  // Depth for the Minimax algorithm
+    private int depth = 2; // Depth for the Minimax algorithm
+    private boolean player = true;
 
     public BotPanel(JFrame parentFrame) {
         super(parentFrame);
@@ -13,140 +15,173 @@ public class BotPanel extends Panel {
     @Override
     public void changePlayer() {
         if (currentColor == WHITE) {
+            System.out.println("Bot's turn");
+            player = true;
             currentColor = BLACK;
             for (Piece piece : pieces) {
                 if (piece.color == BLACK) {
                     piece.twoSquareMove = false;
                 }
             }
-            makeBestBlackMove(depth);  // Trigger Minimax bot move when it’s black’s turn
+            makeBotMove(); // Trigger Minimax bot move
+            // System.out.println("minimax is = " + minimax(depth, false));
+            // makeBestBlackMove(depth); // Trigger Minimax bot move when it’s black’s turn
         } else {
+            System.out.println("White's turn");
+
             currentColor = WHITE;
             for (Piece piece : pieces) {
                 if (piece.color == WHITE) {
                     piece.twoSquareMove = false;
                 }
             }
+
+            System.out.println("Current eval = " + evaluateBoard(simPieces));
         }
+
         activeP = null;
     }
 
-    // Minimax algorithm for move decision-making 
-    public int minimax(int depth, boolean isMaximizingPlayer) {
-        if (depth == 0 || gameOver) {
-            return evaluateBoard();  // Evaluate the board at the limit depth or endgame
-        }
+    @Override
+    public void update() {
 
-        int bestValue = isMaximizingPlayer ? Integer.MIN_VALUE : Integer.MAX_VALUE;
-
-        for (Piece piece : pieces) {
-            if ((isMaximizingPlayer && piece.color == BLACK) || (!isMaximizingPlayer && piece.color == WHITE)) {
-                List<int[]> moves = piece.getPossibleMoves(simPieces);
-
-                for (int[] move : moves) {
-                    int originalCol = piece.col;
-                    int originalRow = piece.row;
-                    Piece capturedPiece = piece.isPieceThere(move[0], move[1]);
-
-                    // Simulate move
-                    piece.col = move[0];
-                    piece.row = move[1];
-                    if (capturedPiece != null) simPieces.remove(capturedPiece);
-
-                    // Skip moves that leave the bot's king in check
-                    if (isKingInCheck(BLACK)) {
-                        // Undo move and continue to next move
-                        piece.col = originalCol;
-                        piece.row = originalRow;
-                        if (capturedPiece != null) simPieces.add(capturedPiece);
-                        continue;
+        if (promotion) {
+            promoting();
+        } else if (!gameOver && !stalemate) {
+            
+            // mouse pressed
+            if (mouse.pressed) {
+                if (activeP == null) {
+                    for (Piece piece : simPieces) {
+                        if (piece.color == currentColor && piece.col == mouse.x / Board.square_size
+                                && piece.row == mouse.y / Board.square_size) {
+                            activeP = piece;
+                        }
                     }
+                } else {
+                    simulate();
+                }
+            }
+            // mouse released
+            if (mouse.pressed == false) {
+                if (activeP != null) {
+                    if (validSquare) {
+                        // piece is moved / Captured / Confirm
+                        copyPieces(simPieces, pieces); // update the piece in the list if piece is captured
+                        activeP.updatePosition();
+                        if (castlingP != null) {
+                            castlingP.updatePosition();
+                        }
 
-                    int value = minimax(depth - 1, !isMaximizingPlayer);  // Recursively evaluate move
+                        if (isKinginCheck() && isCheckmate()) {
+                            System.out.println("Checkmate");
+                            gameOver = true;
+                        } else if (!isKinginCheck() && isStalemate()) {
+                            System.out.println("Stalemate");
+                            stalemate = true;
+                        } else {
+                            if (canPromote()) {
+                                promotion = true;
+                            } else {
+                                changePlayer();
+                                
+                            }
+                        }
 
-                    // Undo move
-                    piece.col = originalCol;
-                    piece.row = originalRow;
-                    if (capturedPiece != null) simPieces.add(capturedPiece);
-
-                    // Select best move based on player
-                    if (isMaximizingPlayer) {
-                        bestValue = Math.max(bestValue, value);
                     } else {
-                        bestValue = Math.min(bestValue, value);
+                        copyPieces(pieces, simPieces);
+                        activeP.resetPosition();
+                        activeP = null;
                     }
                 }
             }
         }
-        return bestValue;
+
+    }
+
+    // Minimax algorithm for move decision-making
+    private int minimax(int depth, boolean isMaximizingPlayer) {
+        // System.out.println("Minimax depth: " + depth);
+        // ArrayList<Piece> mPieces = new ArrayList<>(simPieces);
+        if (gameOver || depth == 0) {
+            return evaluateBoard(simPieces);
+        }
+        Piece capturedP = null;
+        if (isMaximizingPlayer) { // White's turn
+            int bestScore = Integer.MIN_VALUE;
+            for (Move posMove : getPossibleMoves(simPieces)) { // Create a copy of the list to iterate over
+                if (posMove.piece.color == WHITE) {
+                    capturedP = posMove.piece.isPieceThere(posMove.targetCol, posMove.targetRow);
+                    if (capturedP != null) {
+                        simPieces.remove(capturedP);
+                    }
+                    posMove.executeMove(); // Simulate move
+                    int score = minimax(depth - 1, false);
+                    posMove.undoMove(); // Undo move
+                    if (capturedP != null) {
+                        simPieces.add(capturedP);
+                        capturedP = null;
+                    }
+                    bestScore = Math.max(score, bestScore); // Maximizing player's choice
+                }
+
+            }
+            return bestScore;
+        } else { // Minimize player's turn
+            int bestScore = Integer.MAX_VALUE;
+            for (Move posMove : getPossibleMoves(simPieces)) { // Create a copy of the list to iterate over
+                if (posMove.piece.color == BLACK) {
+                    capturedP = posMove.piece.isPieceThere(posMove.targetCol, posMove.targetRow);
+                    if (capturedP != null) {
+                        simPieces.remove(capturedP);
+                    }
+                    posMove.executeMove(); // Simulate move
+
+                    // piece.updatePosition();
+                    int score = minimax(depth - 1, true); // Alternate to maximizing player
+                    posMove.undoMove(); // Undo move
+                    if (capturedP != null) {
+                        simPieces.add(capturedP);
+                        capturedP = null;
+                    }
+                    bestScore = Math.min(score, bestScore); // Minimizing player's choice
+                }
+            }
+            return bestScore;
+        }
     }
 
     // Execute the best move for black determined by Minimax
-    public void makeBestBlackMove(int depth) {
-        Piece bestPiece = null;
-        int[] bestMove = null;
-        int bestScore = Integer.MIN_VALUE;
+    private Move findBestMoveForBlack() {
+        int bestScore = Integer.MAX_VALUE; // Initialize to maximum value since Black is minimizing
+        Move bestMove = null;
 
-        for (Piece piece : pieces) {
-            if (piece.color == BLACK) {
-                List<int[]> moves = piece.getPossibleMoves(simPieces);
+        // Iterate through all possible moves for Black
+        for (Move posMove : getPossibleMoves(simPieces)) {
+            if (posMove.piece.color == BLACK) {
+                Piece capturedP = posMove.piece.isPieceThere(posMove.targetCol, posMove.targetRow);
+                if (capturedP != null) {
+                    simPieces.remove(capturedP);
+                }
+                posMove.executeMove(); // Simulate move
 
-                for (int[] move : moves) {
-                    int originalCol = piece.col;
-                    int originalRow = piece.row;
-                    Piece capturedPiece = piece.isPieceThere(move[0], move[1]);
+                // Evaluate the move using minimax
+                int score = minimax(depth - 1, true); // Alternate to maximizing player
 
-                    // Simulate move
-                    piece.col = move[0];
-                    piece.row = move[1];
-                    if (capturedPiece != null) simPieces.remove(capturedPiece);
+                posMove.undoMove(); // Undo move
+                if (capturedP != null) {
+                    simPieces.add(capturedP);
+                }
 
-                    int score = minimax(depth - 1, false);  // Evaluate move with Minimax
-
-                    // Undo move
-                    piece.col = originalCol;
-                    piece.row = originalRow;
-                    if (capturedPiece != null) simPieces.add(capturedPiece);
-
-                    // Track best scoring move
-                    if (score > bestScore) {
-                        bestScore = score;
-                        bestPiece = piece;
-                        bestMove = move;
-                    }
+                // Update best move if the current move has a lower score
+                if (score < bestScore) {
+                    bestScore = score;
+                    bestMove = posMove;
                 }
             }
         }
 
-        // Perform the best move and remove the captured piece permanently if any
-        if (bestPiece != null && bestMove != null) {
-            Piece capturedPiece = bestPiece.isPieceThere(bestMove[0], bestMove[1]);
-            bestPiece.col = bestMove[0];
-            bestPiece.row = bestMove[1];
-            bestPiece.updatePosition();
-
-            // Remove the captured piece permanently from both lists
-            if (capturedPiece != null) {
-                pieces.remove(capturedPiece);
-                simPieces.remove(capturedPiece);
-            }
-
-            changePlayer();  // Change turn to white
-        }
-    }
-
-    // Check if the king of the specified color is in check
-    private boolean isKingInCheck(int color) {
-        Piece king = findKing(color);
-        if (king == null) return false;
-
-        // Check if any opponent piece can move to the king's position
-        for (Piece piece : pieces) {
-            if (piece.color != color && piece.canMove(king.col, king.row)) {
-                return true;
-            }
-        }
-        return false;
+        return bestMove;
     }
 
     // Find the king piece for the specified color
@@ -160,30 +195,72 @@ public class BotPanel extends Panel {
     }
 
     // Evaluation of the board based on material and positional value
-    private int evaluateBoard() {
+    private int evaluateBoard(ArrayList<Piece> evalPieces) {
         int score = 0;
-
-        for (Piece piece : pieces) {
-            int pieceValue = 0;
-
-            // Assign basic material values
-            switch (piece.type) {
-                case QUEEN: pieceValue = 90; break;
-                case ROOK: pieceValue = 50; break;
-                case BISHOP: pieceValue = 30; break;
-                case KNIGHT: pieceValue = 30; break;
-                case PAWN: pieceValue = 10; break;
-                case DRAGON: pieceValue = 70; break;
-                case KING: pieceValue = 900; break;  // High value to prevent sacrificing the king
-            }
-
-            // Additional positional evaluation can be added here
-
-            // Score is positive for black pieces, negative for white pieces
-            if (piece.color == BLACK) score += pieceValue;
-            else score -= pieceValue;
+        if (evalPieces == null) {
+            System.err.println("simPieces is null");
+            return score;
         }
-
+        for (Piece piece : evalPieces) {
+            if (piece == null) {
+                System.err.println("Null piece found in simPieces");
+                continue;
+            }
+            if (piece.color == BLACK) {
+                score -= getPieceValue(piece);
+            } else {
+                score += getPieceValue(piece);
+            }
+        }
         return score;
+    }
+
+    private int getPieceValue(Piece piece) {
+        if (piece.type == Type.PAWN)
+            return 10;
+        if (piece.type == Type.KNIGHT || piece.type == Type.BISHOP)
+            return 30;
+        if (piece.type == Type.ROOK)
+            return 50;
+        if (piece.type == Type.QUEEN)
+            return 90;
+        if (piece.type == Type.DRAGON)
+            return 70;
+        if (piece.type == Type.KING)
+            return 900;
+        else
+            return 0;
+    }
+
+    public ArrayList<Move> getPossibleMoves(ArrayList<Piece> restPieces) {
+        ArrayList<Move> possibleMoves = new ArrayList<>();
+        for (Piece piece : restPieces) {
+            for (int i = 0; i < 8; i++) {
+                for (int j = 0; j < 8; j++) {
+                    if (piece.canMove(i, j)) {
+                        possibleMoves.add(new Move(piece, i, j));
+                    }
+                }
+            }
+        }
+        return possibleMoves;
+    }
+    public void makeBotMove() {
+        Move bestMove = findBestMoveForBlack();
+        if (bestMove != null) {
+            System.out.println("Best move for Black: " + bestMove.piece.type + " to (" + bestMove.targetCol + ", "
+                    + bestMove.targetRow + ")");
+            Piece isPieceThere = bestMove.piece.isPieceThere(bestMove.targetCol, bestMove.targetRow);
+            if (isPieceThere != null) {
+                simPieces.remove(isPieceThere.getIndex());
+            }
+            bestMove.executeMove();
+            copyPieces(simPieces, pieces);
+            // bestMove.piece.col = bestMove.targetCol;
+            // bestMove.piece.row = bestMove.targetRow;
+            changePlayer(); // Switch to the other player's turn
+        } else {
+            System.out.println("No valid moves found for Black.");
+        }
     }
 }
